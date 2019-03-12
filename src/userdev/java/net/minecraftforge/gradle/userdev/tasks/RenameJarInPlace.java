@@ -20,26 +20,28 @@
 
 package net.minecraftforge.gradle.userdev.tasks;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
+import net.minecraftforge.gradle.common.task.JarExec;
+import net.minecraftforge.gradle.common.util.MappingFile;
+import net.minecraftforge.gradle.common.util.Utils;
 import org.apache.commons.io.FileUtils;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.TaskAction;
 
-import net.minecraftforge.gradle.common.task.JarExec;
-import net.minecraftforge.gradle.common.util.Utils;
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class RenameJarInPlace extends JarExec {
     private Supplier<File> input;
     private File temp;
     private Supplier<File> mappings;
+
+    private String jarTask;
+    private MappingFile.Mapping mappingType;
+    private final List<File> extraSrgs = new ArrayList<>();
 
     public RenameJarInPlace() {
         tool = Utils.SPECIALSOURCE;
@@ -54,6 +56,16 @@ public class RenameJarInPlace extends JarExec {
         replace.put("{input}", getInput().getAbsolutePath());
         replace.put("{output}", temp.getAbsolutePath());
         replace.put("{mappings}", getMappings().getAbsolutePath());
+
+        List<String> copy = new ArrayList<>(Arrays.asList(getArgs()));
+
+        // Inject our extra SRGs
+        extraSrgs.forEach(srg -> {
+            copy.add("--srg-in");
+            copy.add(srg.getAbsolutePath());
+        });
+
+        setArgs(copy);
 
         return Arrays.stream(getArgs()).map(arg -> replace.getOrDefault(arg, arg)).collect(Collectors.toList());
     }
@@ -90,5 +102,25 @@ public class RenameJarInPlace extends JarExec {
     }
     public void setInput(Supplier<File> value) {
         this.input = value;
+    }
+
+    @Input
+    public MappingFile.Mapping getMappingType() {
+        return mappingType;
+    }
+    public void setMappingType(MappingFile.Mapping mappingType) {
+        this.mappingType = mappingType;
+    }
+
+    @Input
+    public String getJarTask() {
+        return jarTask;
+    }
+    public void setJarTask(String jarTask) {
+        this.jarTask = jarTask;
+    }
+
+    public void extraFiles(File... srgs) {
+        extraSrgs.addAll(Arrays.asList(srgs));
     }
 }
