@@ -531,4 +531,17 @@ public class Utils {
             }
         });
     }
+    
+    public static File getMCDir()
+    {
+        switch (VersionJson.OS.getCurrent()) {
+            case OSX:
+                return new File(System.getProperty("user.home") + "/Library/Application Support/minecraft");
+            case WINDOWS:
+                return new File(System.getenv("APPDATA") + "\\.minecraft");
+            case LINUX:
+            default:
+                return new File(System.getProperty("user.home") + "/.minecraft");
+        }
+    }
 }
