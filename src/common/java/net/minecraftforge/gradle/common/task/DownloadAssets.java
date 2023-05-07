@@ -20,6 +20,14 @@
 
 package net.minecraftforge.gradle.common.task;
 
+import net.minecraftforge.gradle.common.util.HashFunction;
+import net.minecraftforge.gradle.common.util.Utils;
+import net.minecraftforge.gradle.common.util.VersionJson;
+import org.apache.commons.io.FileUtils;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.TaskAction;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -27,37 +35,28 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
-import org.apache.commons.io.FileUtils;
-import org.gradle.api.DefaultTask;
-import org.gradle.api.tasks.InputFile;
-import org.gradle.api.tasks.TaskAction;
-
-import net.minecraftforge.gradle.common.util.Utils;
-import net.minecraftforge.gradle.common.util.VersionJson;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class DownloadAssets extends DefaultTask {
-   public DownloadAssets() {
-        getAssetRepository().convention("https://resources.download.minecraft.net/");
-        getConcurrentDownloads().convention(8);
-    }
+    private static final String RESOURCE_REPO = "https://resources.download.minecraft.net/";
+    private File meta;
 
     @TaskAction
     public void run() throws IOException, InterruptedException {
         AssetIndex index = Utils.loadJson(getIndex(), AssetIndex.class);
         List<String> keys = new ArrayList<>(index.objects.keySet());
         Collections.sort(keys);
-        removeDuplicateRemotePaths(keys, index);
-
         File assetsPath = new File(Utils.getMCDir(), "/assets/objects");
-        ExecutorService executorService = Executors.newFixedThreadPool(getConcurrentDownloads().get());
+        ExecutorService executorService = Executors.newFixedThreadPool(8);
         CopyOnWriteArrayList<String> failedDownloads = new CopyOnWriteArrayList<>();
-        String assetRepo = getAssetRepository().get();
         for (String key : keys) {
             Asset asset = index.objects.get(key);
             File target = Utils.getCache(getProject(), "assets", "objects", asset.getPath());
             if (!target.exists() || !HashFunction.SHA1.hash(target).equals(asset.hash)) {
-                URL url = new URL(assetRepo + asset.getPath());
+                URL url = new URL(RESOURCE_REPO + asset.getPath());
                 Runnable copyURLtoFile = () -> {
                     try {
                         File localFile = FileUtils.getFile(assetsPath + File.separator + asset.getPath());
@@ -94,36 +93,21 @@ public class DownloadAssets extends DefaultTask {
         }
     }
 
-    // Some keys may reference the same remote file. Remove these duplicates to prevent two threads
-    // writing to the same file on disk.
-    private static void removeDuplicateRemotePaths(List<String> keys, AssetIndex index) {
-        Set<String> seen = new HashSet<>(keys.size());
-        keys.removeIf(key -> !seen.add(index.objects.get(key).getPath()));
-    }
-
     private File getIndex() throws IOException {
-        VersionJson json = Utils.loadJson(getMeta().get().getAsFile(), VersionJson.class);
+        VersionJson json = Utils.loadJson(getMeta(), VersionJson.class);
         File target = Utils.getCache(getProject(), "assets", "indexes", json.assetIndex.id + ".json");
         return Utils.updateDownload(getProject(), target, json.assetIndex);
     }
 
     @InputFile
-    public abstract RegularFileProperty getMeta();
+    public File getMeta() {
+        return this.meta;
+    }
 
-    /**
-     * The Base URL that will be used to download Minecraft assets.
-     * A trailing slash is required.
-     */
-    @Internal
-    public abstract Property<String> getAssetRepository();
+    public void setMeta(File value) {
+        this.meta = value;
+    }
 
-    /**
-     * Defines how many threads will be used to download assets concurrently.
-     */
-    @Internal
-    public abstract Property<Integer> getConcurrentDownloads();
-
-    @OutputDirectory
     public File getOutput() {
         return Utils.getCache(getProject(), "assets");
     }
